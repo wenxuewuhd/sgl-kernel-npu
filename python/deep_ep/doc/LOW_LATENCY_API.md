@@ -1,111 +1,244 @@
-**ÎÄ¼ş**£º`buffer.py`
+# Low-Latency Mode API
 
-**ºËĞÄÀà**£º`Buffer`
+<div align="center">
 
-**ÒÀÀµ**£º`torch`, `deep_ep_cpp`
+[![Mode](https://img.shields.io/badge/Mode-Low--Latency-orange)]()
+[![Platform](https://img.shields.io/badge/Platform-A2%20%7C%20A3%20%7C%20A5-green)]()
 
-**Ä¿µÄ**£ºÔÚ **¶à NPU£¨Intranode£©** Óë **¿ç½Úµã£¨Internode£©** »·¾³ÏÂ£¬¸ßĞ§Íê³É µÍÊ±ÑÓ**Token Dispatch** Óë **Token Combine**£¨¼´·Ö·¢?¹éÔ¼£©²Ù×÷¡£
+English | [ä¸­æ–‡](#ä¸­æ–‡)
 
-# low_latency_dispatch
+</div>
 
-## python²à½Ó¿Ú
+> **File**: `buffer.py`
+> **Core class**: `Buffer`
+> **Dependencies**: `torch`, `deep_ep_cpp`
+> **Purpose**: Efficiently perform **low-latency Token Dispatch** and **Token Combine** (dispatch-reduce) operations in **multi-NPU (Intranode)** and **cross-node (Internode)** environments.
 
-```python
-# noinspection PyTypeChecker
-def low_latency_dispatch(self, x: torch.Tensor, topk_idx: torch.Tensor,
-                         num_max_dispatch_tokens_per_rank: int, num_experts: int,
-                         cumulative_local_expert_recv_stats: Optional[torch.Tensor] = None,
-                         use_fp8: bool = True, round_scale: bool = False, use_ue8m0: bool = False,
-                         async_finish: bool = False, return_recv_hook: bool = False) -> \
-        Tuple[Tuple[torch.Tensor, torch.Tensor], torch.Tensor, Tuple, EventOverlap, Callable]:
-"""
-        A low-latency implementation for dispatch.
+---
 
-Arguments:
-	x£º´øÓĞ`torch.bfloat16`µÄ`torch.Tensor`£¬ĞÎ×´Îª`[num_tokens£¬Òş²ØµÄ]`£¬Ö»ÓĞ¼¸¸öÒş²ØµÄĞÎ×´ÊÇÖ§³Ö£¬Òª·Ö·¢µÄÁîÅÆÊı±ØĞëĞ¡ÓÚ`num_max_dispatch_tokens_per_rank`¡£
-	topk_idx£º´øÓĞ`torch.int64`µÄ`torch.Tensor`£¬ĞÎ×´Îª`[num_tokens, num_topk]`£¬Ö»ÓĞ¼¸¸ötop-kĞÎ×´¶¼Ö§³Ö¡£Ö§³Ö`-1`¸öË÷Òı£¨²»Ñ¡ÔñÈÎºÎ×¨¼Ò£©¡£
-	num_max_dispatch_tokens_per_rank£ºÒª·Ö·¢µÄÁîÅÆµÄ×î´óÊıÁ¿£¬ËùÓĞRank±ØĞë³ÖÓĞÏàÍ¬µÄÖµ¡£
-	num_experts£ºËùÓĞ×¨¼ÒµÄ¸öÊı¡£
-	accumulation_local_expert_recv_stats£ºÓÃÓÚÍ³¼ÆµÄÀÛ»ı×¨¼Ò¼ÆÊıÕÅÁ¿£¬ËüÓ¦¸Ã¾ßÓĞĞÎ×´`[num_local_experts]`²¢¼üÈëÎª`torch.int`¡£Õâ¶ÔÓÚÔÚÏß·şÎñEP¸ºÔØÆ½ºâ¼à¿Ø·Ç³£ÓĞÓÃ¡£
-	use_fp8£ºÊÇ·ñÆôÓÃFP8ÖıÔì£¬ÓĞÁË´Ë£¬½ÓÊÕµÄÊı¾İ½«ÊÇFP8ÕÅÁ¿ºÍËõ·ÅÒò×ÓµÄÔª×é¡£
-	Round_scale£ºÊÇ·ñ½«Ëõ·ÅÒò×ÓËÄÉáÎåÈëÎª2µÄ´ÎÃİ¡£
-	use_ue8m0£ºÊÇ·ñÊ¹ÓÃUE8M0×÷ÎªËõ·ÅÒò×Ó¸ñÊ½£¨½öÊÊÓÃÓÚ`round_scale=True`£©¡£
-	async_finish£ºÈç¹ûÉèÖÃÁË£¬µ±Ç°Á÷²»»áµÈ´ıÍ¨ĞÅÄÚºËÍê³É¡£
-	return_recv_hook£ºÈç¹ûÉèÖÃÁË£¬Ôò·µ»Ø½ÓÊÕ¹³×Ó¡£Èç¹ûÉèÖÃ£¬ÄÚºË½«Ö»´¦ÀíRDMAÇëÇóÎÊÌâ£¬µ«ÊÇ²¢Ã»ÓĞÊµ¼Ê½ÓÊÕµ½Êı¾İ£¬Äã±ØĞëµ÷ÓÃ½ÓÊÕµÄ¹³×ÓÀ´È·±£Êı¾İµÄµ½´ï¡£Èç¹û²»ÉèÖÃ´Ë±êÖ¾£¬ÄÚºË½«È·±£Êı¾İµÄµ½´ï¡£
+## `low_latency_dispatch`
 
-Returns:
-	recv_x£ºÒ»¸öÕÅÁ¿»òÔª×é£¬°üº¬Ã¿¸ö×¨¼ÒµÄ½ÓÊÕÁîÅÆ¡£µ± `use_fp8=True` Ê±£ºµÚÒ»¸öÔªËØÊÇÒ»¸öĞÎ×´Îª `[num_local_experts, num_max_dispatch_tokens_per_rank * num_ranks, hidden]` µÄ `torch.Tensor`£¬Ê¹ÓÃ `torch.float8_e4m3fn` ÀàĞÍ¡£µÚ¶ş¸öÕÅÁ¿ÊÇµÚÒ»¸öÔªËØµÄÏàÓ¦±ÈÀı£¬ĞÎ×´Îª `[num_local_experts, num_max_dispatch_tokens_per_rank * num_ranks, hidden // 128]`£¬Ê¹ÓÃ `torch.float` ÀàĞÍ£¬Èç¹û `use_ue8m0=False`¡£Èç¹û `use_ue8m0=True`£¬µÚ¶ş¸öÕÅÁ¿ÊÇ´ò°üµÄ£¬ĞÎ×´Îª `[num_local_experts, num_max_dispatch_tokens_per_rank * num_ranks, hidden // 512]`£¬ÀàĞÍÎª `torch.int`¡£×¢Òâ£¬±ÈÀıÕÅÁ¿µÄ×îºóÁ½¸öÎ¬¶ÈÊÇÁĞÖ÷ĞòµÄ£¬ÒÔ¼æÈİ TMA¡£µ± `use_fp8=False` Ê±£¬½á¹û½«ÊÇÒ»¸öĞÎ×´Îª `[num_local_experts, num_max_dispatch_tokens_per_rank * num_ranks, hidden]` µÄÕÅÁ¿£¬Ê¹ÓÃ `torch.bfloat16` ÀàĞÍ¡£´ËÍâ£¬²¢·ÇËùÓĞÁîÅÆ¶¼ÊÇÓĞĞ§µÄ£¬Ö»ÓĞ²¿·Ö `num_max_dispatch_tokens_per_rank * num_ranks` ÊÇÓĞĞ§µÄ£¬ÒòÎªÎÒÃÇÃ»ÓĞ½« CPU ½ÓÊÕ¼ÆÊıÓë GPU Í¬²½£¨¼´Ê¹Í¬²½Ò²²»»áÓë CUDA Í¼²»¼æÈİ£©¡£
-	recv_count£ºÒ»¸öĞÎ×´Îª `[num_local_experts]` µÄÕÅÁ¿£¬ÀàĞÍÎª `torch.int`£¬±íÊ¾Ã¿¸ö×¨¼Ò½ÓÊÕµÄÁîÅÆÊıÁ¿¡£ÈçÇ°ËùÊö£¬`recv_x` ÖĞ²¢·ÇËùÓĞÁîÅÆ¶¼ÊÇÓĞĞ§µÄ¡£
-	handle£ºÔÚ `low_latency_combine` º¯ÊıÖĞÊ¹ÓÃµÄÍ¨ĞÅ¾ä±ú¡£
-	event£ºÖ´ĞĞÄÚºËºóµÄÊÂ¼ş£¨½öÔÚ `async_finish` ÉèÖÃÊ±ÓĞĞ§£©¡£
-	hook£º½ÓÊÕ¹³×Óº¯Êı£¨½öÔÚ `return_recv_hook` ÉèÖÃÊ±ÓĞĞ§£©¡£
-"""
-```
-
-| **²ÎÊıÀà±ğ** | **²ÎÊıÃû**                           | **ÀàĞÍ**                 | **Ä¬ÈÏÖµ** | **ÏêÏ¸ÃèÊö**                                                 | **ÊÇ·ñ±ØÒª** | **×¢ÒâÊÂÏî**                                                 |
-| ------------ | ------------------------------------ | ------------------------ | ---------- | ------------------------------------------------------------ | ---------- | ------------------------------------------------------------ |
-| **ºËĞÄÊäÈë** | `x`                                  | `torch.Tensor`           | -          | ÊäÈëtokenÊı¾İ£¬ĞÎ×´`[num_tokens, hidden]`£¬ÀàĞÍ`torch.bfloat16`¡£`num_tokens <= 512`| ÊÇ        | tokenÊı±ØĞëĞ¡ÓÚ`num_max_dispatch_tokens_per_rank`, A2 Ëã×ÓÊµÏÖÒªÇó 0 < hidden <= 7168 and hidden % 32 = 0           |
-|              | `topk_idx`                           | `torch.Tensor`           | -          | ×¨¼ÒË÷Òı£¬ĞÎ×´`[num_tokens, num_topk]`£¬ÀàĞÍ`torch.int64`£¬Ö§³Ö`-1`£¨²»Ñ¡ÔñÈÎºÎ×¨¼Ò£© | ÊÇ        | ¾ö¶¨tokenÂ·ÓÉµ½ÄÄ¸ö×¨¼Ò                                      |
-| **ÅäÖÃ²ÎÊı** | `num_max_dispatch_tokens_per_rank`   | `int`                    | -          | Ã¿¸örank×î´ó·Ö·¢tokenÊı£¬ËùÓĞrank±ØĞëÏàÍ¬                    | ÊÇ        | Ó°ÏìÄÚ´æ·ÖÅäºÍĞÔÄÜÉÏÏŞ                                       |
-|              | `num_experts`                        | `int`                    | -          | ×¨¼Ò×ÜÊı                                                     | ÊÇ        | ÓÃÓÚÂ·ÓÉ¾ö²ßºÍ¸ºÔØ¾ùºâ                                       |
-| **Í³¼Æ¼à¿Ø** | `cumulative_local_expert_recv_stats` | `Optional[torch.Tensor]` | `None`     | ÀÛ¼Æ×¨¼Ò½ÓÊÕÍ³¼Æ£¬ĞÎ×´`[num_local_experts]`£¬ÀàĞÍ`torch.int` | -          | ÓÃÓÚÔÚÏß·şÎñEP¸ºÔØ¾ùºâ¼à¿Ø¡£DeepEp-Ascend²»ĞèÒª              |
-| **¾«¶È¿ØÖÆ** | `use_fp8`                            | `bool`                   | `True`     | ÊÇ·ñÆôÓÃFP8Á¿»¯£¨A3/A2Ğ¾Æ¬Ö»Ö§³ÖINT8Á¿»¯£©£¬Èôuse_fp8=True£¬Ëã×ÓÄÚ²¿»áÏÈ°Ñtoken´Óbfloat16×ª»¯ÎªINT8ÀàĞÍµÄtensorºóÔÙÍ¨ĞÅ£¬ÒÔ½µµÍÍ¨ĞÅÊ±ÑÓ | -        | ÏÔÖø¼õÉÙÍ¨ĞÅ´ø¿í                                             |
-|              | `round_scale`                        | `bool`                   | `False`    | ÊÇ·ñ½«Ëõ·ÅÒò×ÓËÄÉáÎåÈëÎª2µÄÃİ                                | -          | Óë`use_ue8m0`ÅäºÏÊ¹ÓÃ                                        |
-|              | `use_ue8m0`                          | `bool`                   | `False`    | ÊÇ·ñÊ¹ÓÃUE8M0×÷ÎªËõ·ÅÒò×Ó¸ñÊ½£¨½öÔÚ`round_scale=True`Ê±ÓĞĞ§£© | -          | ÓÅ»¯Ëõ·ÅÒò×Ó´æ´¢¸ñÊ½                                         |
-| **Òì²½¿ØÖÆ** | `async_finish`                       | `bool`                   | `False`    | Èç¹ûÉèÖÃ£¬µ±Ç°Á÷²»»áµÈ´ıÍ¨ĞÅÄÚºËÍê³É                         | -          | Ìá¸ßGPUÀûÓÃÂÊ£¬ĞèÊÖ¶¯Í¬²½¡£DeepEp-Ascend²»ĞèÒª               |
-|              | `return_recv_hook`                   | `bool`                   | `False`    | Èç¹ûÉèÖÃ£¬·µ»Ø½ÓÊÕ¹³×Ó£¬ÄÚºËÖ»·¢RDMAÇëÇó²»½ÓÊÕÊı¾İ           | -          | ÊµÏÖÕæÕıµÄÒì²½Í¨ĞÅ£¬±ØĞëµ÷ÓÃ¹³×ÓÈ·±£Êı¾İµ½´ï¡£DeepEp-Ascend²»ĞèÒª |
-| **·µ»ØÖµ**   | `recv_x`                             | `Tuple/Tensor`           | -          | ½ÓÊÕµÄtokenÊı¾İ£º<br>- `use_fp8=True`: `(INT8_tensor, scales)`<br>- `use_fp8=False`: `bfloat16_tensor` | ÊÇ        | ²¢·ÇËùÓĞtoken¶¼ÓĞĞ§£¬Ğè½áºÏ`recv_count`Ê¹ÓÃ                  |
-|              | `recv_count`                         | `torch.Tensor`           | -          | Ã¿¸ö×¨¼Ò½ÓÊÕµÄtokenÊıÁ¿£¬ĞÎ×´`[num_local_experts]`£¬ÀàĞÍ`torch.int` | ÊÇ        | Ö¸Ê¾`recv_x`ÖĞÓĞĞ§tokenÊıÁ¿                                  |
-|              | `handle`                             | `tuple`                  | -          | Í¨ĞÅ¾ä±ú£¬°üº¬`(src_info, layout_range, num_max_dispatch_tokens_per_rank, hidden, num_experts, packed_recv_count)` | ÊÇ        | ±ØĞë´«µİ¸ø`low_latency_combine`                              |
-|              | `event`                              | `EventOverlap`           | -          | ÄÚºËÖ´ĞĞºóµÄÊÂ¼ş£¨½öÔÚ`async_finish=True`Ê±ÓĞĞ§£©            | -          | ÓÃÓÚÊÂ¼şÍ¬²½ºÍ¼ÇÂ¼¡£DeepEp-Ascend²»ĞèÒª                      |
-|              | `hook`                               | `Callable`               | -          | ½ÓÊÕ¹³×Óº¯Êı£¨½öÔÚ`return_recv_hook=True`Ê±ÓĞĞ§£©            | -          | µ÷ÓÃÒÔÈ·±£Êı¾İµ½´ï¡£DeepEp-Ascend²»ĞèÒª                      |
-
-# low_latency_combine
-
-## Python ²à½Ó¿Ú
+### Interface
 
 ```python
-def low_latency_combine(self, x: torch.Tensor,
-                        topk_idx: torch.Tensor,
-                        topk_weights: torch.Tensor,
-                        handle: tuple,
-                        zero_copy: bool = False,
-                        async_finish: bool = False,
-                        return_recv_hook: bool = False,
-                        out: Optional[torch.Tensor] = None) -> \
-            Tuple[torch.Tensor,
-                  EventOverlap,
-                  Callable]:
-"""
-CombineËã×ÓµÄµÍÊ±ÑÓÊµÏÖ
-
-²ÎÊı£º
-	x£ºÊı¾İÀàĞÍÎª torch.bfloat16¡¢ĞÎ×´Îª [num_local_experts, num_max_dispatch_tokens_per_rank * num_ranks, hidden] µÄÕÅÁ¿£¬Ö¸Ğè·¢ËÍÖÁÔ­Ê¼ rank ½øĞĞ reduce ÔËËãµÄ±¾µØ token¡£
-	topk_idx£ºÊı¾İÀàĞÍÎªtorch.int64¡¢ĞÎ×´Îª[num_combined_tokens, num_topk]µÄÕÅÁ¿£¬´ú±íÓÉµ÷¶ÈÁîÅÆÑ¡ÖĞµÄ×¨¼ÒË÷Òı¡£Ö§³Ö-1Ë÷Òı£¨±íÊ¾²»Ñ¡ÖĞÈÎºÎ×¨¼Ò£©¡£Ğè×¢Òâ£¬num_combined_tokensµÈÓÚdispatched token µÄÊıÁ¿¡£
-	topk_weights£ºÊı¾İÀàĞÍÎª torch.float¡¢ĞÎ×´Îª [num_tokens, num_topk] µÄÕÅÁ¿£¬Ö¸Ğè·¢ËÍÖÁ³õÊ¼ rank ½øĞĞ reduce ÔËËãµÄtoken µÄ Top-K È¨ÖØ¡£½ÓÊÕµÄ token ½«Í¨¹ı¸ÃÕÅÁ¿ÖĞµÄÈ¨ÖØ½øĞĞ¹éÔ¼¡£
-	handle£ºÓÉ dispatch º¯ÊıÌá¹©µÄÍ¨ĞÅ¾ä±ú¡£
-	zero_copy£º±íÊ¾ÕÅÁ¿ÊÇ·ñÒÑ¸´ÖÆµ½ RDMA£¨Ô¶³ÌÖ±½ÓÄÚ´æ·ÃÎÊ£©»º³åÇøÖĞ£¬ĞèÓëget_next_low_latency_combine_bufferĞ­Í¬Ê¹ÓÃ¡£
-	async_finish£ºÈôÉèÖÃÎª True£¬µ±Ç° stream ½«²»»áµÈ´ıÍ¨ĞÅºËĞÄÔËËãÍê³É£¨¼´²ÉÓÃÒì²½Ö´ĞĞ·½Ê½£©¡£
-	return_recv_hook£ºÈôÉèÎª True£¬½«·µ»Ø½ÓÊÕ¹³×Ó£¨receiving hook£©¡£´ËÊ±£¬ÄÚºË½ö»á·¢Æğ RDMA ÇëÇó£¬²»»áÊµ¼Ê½ÓÊÕÊı¾İ¡£±ØĞëµ÷ÓÃ½ÓÊÕ¹³×Ó£¬ÒÔÈ·±£Êı¾İµ½´ï¡£Èô²»ÉèÖÃ´Ë±êÖ¾£¬ÄÚºË½«È·±£Êı¾İµ½´ï¡£
-	out£ºÔ­µØ£¨in-place£©Êä³öÕÅÁ¿¡£ÈôÉèÖÃ¸Ã²ÎÊı£¬ÄÚºË»á½«½á¹ûĞ´Èë´ËÕÅÁ¿£¬²¢Ö±½Ó·µ»Ø¸ÃÕÅÁ¿¡£
-
-·µ»ØÖµ£¨Returns£©£º
-	combined_x£º¹éÔ¼ºóµÄ token ÕÅÁ¿£¬ĞÎ×´Îª[num_combined_tokens, hidden]£¬Êı¾İÀàĞÍÎªtorch.bfloat16¡£
-	event£ºÖ´ĞĞÄÚºËºóµÄÊÂ¼ş£¨½öµ±async_finishÉèÎª True Ê±ÓĞĞ§£©¡£
-	hook£º½ÓÊÕ¹³×Óº¯Êı£¨½öµ±return_recv_hookÉèÎª True Ê±ÓĞĞ§£©¡£
-"""
+def low_latency_dispatch(
+    self,
+    x: torch.Tensor,
+    topk_idx: torch.Tensor,
+    num_max_dispatch_tokens_per_rank: int,
+    num_experts: int,
+    cumulative_local_expert_recv_stats: Optional[torch.Tensor] = None,
+    use_fp8: bool = True,
+    round_scale: bool = False,
+    use_ue8m0: bool = False,
+    use_mxfp4: bool = False,
+    async_finish: bool = False,
+    return_recv_hook: bool = False,
+    topk_weights: Optional[torch.Tensor] = None,
+) -> Tuple[
+    Tuple[torch.Tensor, torch.Tensor], torch.Tensor, Tuple, EventOverlap, Callable
+]
 ```
 
-| **²ÎÊıÀà±ğ** | **²ÎÊıÃû**         | **ÀàĞÍ**                 | **Ä¬ÈÏÖµ** | **ÏêÏ¸ÃèÊö**                                                 | **ÊÇ·ñ±ØÒª** | **×¢ÒâÊÂÏî**                                |
-| ------------ | ------------------ | ------------------------ | ---------- | ------------------------------------------------------------ | ---------- | ------------------------------------------- |
-| **ºËĞÄÊäÈë** | `x`                | `torch.Tensor`           | -          | ±¾µØ¼ÆËãµÄtoken£¬ĞÎ×´`[num_local_experts, num_max_dispatch_tokens_per_rank * num_ranks, hidden]`£¬ÀàĞÍ`torch.bfloat16` | ÊÇ        | Ã¿¸ö×¨¼Ò´¦ÀíºóµÄ½á¹û                        |
-|              | `topk_idx`         | `torch.Tensor`           | -          | ×¨¼ÒË÷Òı£¬ĞÎ×´`[num_combined_tokens, num_topk]`£¬ÀàĞÍ`torch.int64`£¬`num_combined_tokens`µÈÓÚ·Ö·¢tokenÊı | ÊÇ        | ±ØĞëÓëdispatchÊ±µÄË÷ÒıÆ¥Åä                  |
-|              | `topk_weights`     | `torch.Tensor`           | -          | ×¨¼ÒÈ¨ÖØ£¬ĞÎ×´`[num_combined_tokens, num_topk]`£¬ÀàĞÍ`torch.float`£¬ÓÃÓÚ¹éÔ¼Ê±¼ÓÈ¨ | ÊÇ        | ¾ö¶¨×îÖÕtokenµÄ¼ÓÈ¨½á¹û                     |
-| **Í¨ĞÅ¿ØÖÆ** | `handle`           | `tuple`                  | -          | ÓÉdispatchº¯Êı·µ»ØµÄÍ¨ĞÅ¾ä±ú£¬°üº¬Â·ÓÉĞÅÏ¢ºÍÍ³¼ÆĞÅÏ¢         | ÊÇ        | **±ØĞë**´Ó¶ÔÓ¦µÄdispatchµ÷ÓÃ»ñÈ¡            |
-| **ÓÅ»¯¿ØÖÆ** | `zero_copy`        | `bool`                   | `False`    | ÕÅÁ¿ÊÇ·ñÒÑ¸´ÖÆµ½RDMA»º³åÇø£¬ĞèÓë`get_next_low_latency_combine_buffer`ÅäºÏÊ¹ÓÃ | -          | ¼õÉÙÄÚ´æ¿½±´¿ªÏú¡£DeepEp-Ascend²»ĞèÒª       |
-| **Òì²½¿ØÖÆ** | `async_finish`     | `bool`                   | `False`    | Èç¹ûÉèÖÃ£¬µ±Ç°Á÷²»»áµÈ´ıÍ¨ĞÅÄÚºËÍê³É                         | -          | Ìá¸ßGPUÀûÓÃÂÊ¡£DeepEp-Ascend²»ĞèÒª          |
-|              | `return_recv_hook` | `bool`                   | `False`    | Èç¹ûÉèÖÃ£¬·µ»Ø½ÓÊÕ¹³×Ó£¬ÄÚºËÖ»·¢RDMAÇëÇó²»½ÓÊÕÊı¾İ           | -          | ÊµÏÖÕæÕıµÄÒì²½Í¨ĞÅ¡£DeepEp-Ascend²»ĞèÒª     |
-| **Êä³ö¿ØÖÆ** | `out`              | `Optional[torch.Tensor]` | `None`     | Ô­µØÊä³öÕÅÁ¿£¬Èç¹ûÉèÖÃ£¬½á¹ûÖ±½ÓĞ´Èë´ËÕÅÁ¿                   | -          | ±ÜÃâ¶îÍâÄÚ´æ·ÖÅä¡£DeepEp-Ascend²»ĞèÒª       |
-| **·µ»ØÖµ**   | `combined_x`       | `torch.Tensor`           | -          | ¹éÔ¼ºóµÄtokenÕÅÁ¿£¬ĞÎ×´`[num_combined_tokens, hidden]`£¬ÀàĞÍ`torch.bfloat16` | ÊÇ        | ×îÖÕµÄ×¨¼Ò»ìºÏ½á¹û                          |
-|              | `event`            | `EventOverlap`           | -          | ÄÚºËÖ´ĞĞºóµÄÊÂ¼ş£¨½öÔÚ`async_finish=True`Ê±ÓĞĞ§£©            | -          | ÓÃÓÚÊÂ¼şÍ¬²½ºÍ¼ÇÂ¼¡£DeepEp-Ascend²»ĞèÒª     |
-|              | `hook`             | `Callable`               | -          | ½ÓÊÕ¹³×Óº¯Êı£¨½öÔÚ`return_recv_hook=True`Ê±ÓĞĞ§£©            | -          | ±ØĞëµ÷ÓÃÒÔÈ·±£Êı¾İµ½´ï¡£DeepEp-Ascend²»ĞèÒª |
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| **x** | `torch.Tensor` (`bfloat16`) | Yes | â€“ | Shape `[num_tokens, hidden]`. The number of tokens to be dispatched must be less than `num_max_dispatch_tokens_per_rank`. A2: `0 < hidden <= 7168` and `hidden % 32 == 0`. |
+| **topk_idx** | `torch.Tensor` (`int64`) | Yes | â€“ | Shape `[num_tokens, num_topk]`, expert indices selected per token. `-1` means no expert selected. |
+| **num_max_dispatch_tokens_per_rank** | `int` | Yes | â€“ | Maximum number of tokens to dispatch per rank. All ranks must hold the same value. |
+| **num_experts** | `int` | Yes | â€“ | Total number of experts. |
+| **cumulative_local_expert_recv_stats** | `Optional[torch.Tensor]` (`int`) | No | `None` | Shape `[num_local_experts]`, cumulative expert count for online EP load balance monitoring. Not needed on DeepEP-Ascend. |
+| **use_fp8** | `bool` | No | `True` | On NPU, enables per-token dynamic quantization (quant_mode=2). Communication data is INT8 with per-token `float32` scales. |
+| **round_scale** | `bool` | No | `False` | Whether to round scaling factors into powers of 2. Used together with `use_ue8m0`. |
+| **use_ue8m0** | `bool` | No | `False` | On NPU, triggers MXFP8 per-block quantization (quant_mode=3). Data format: `float8_e4m3fn`, scales: `float8_e8m0fnu` (one scale per 32-element block). Requires `use_fp8=True`. Only available on A5. Not supported on `alltoall` strategy. |
+| **use_mxfp4** | `bool` | No | `False` | On NPU, triggers MXFP4 per-block quantization (quant_mode=4). Data format: `float4_e2m1fn_x2`, scales: `float8_e8m0fnu` (one scale per 32-element block). Requires `use_fp8=True`. Only available on A5 and only supported on `default` strategy (ops/alltoall strategies silently ignore this flag). |
+| **async_finish** | `bool` | No | `False` | If set, the current stream will not wait for the communication kernel to finish. Not needed on DeepEP-Ascend. |
+| **return_recv_hook** | `bool` | No | `False` | If set, returns a receiving hook. The kernel will only issue RDMA requests without actually receiving data; you must call the hook to ensure data arrival. Not needed on DeepEP-Ascend. |
+| **topk_weights** | `Optional[torch.Tensor]` (`float`) | No | `None` | Top-k weights corresponding to `topk_idx`. |
+
+### Return Values
+
+| Return Value | Type | Description |
+|--------------|------|-------------|
+| **recv_x** | `Tuple[torch.Tensor, torch.Tensor]` or `torch.Tensor` | Received tokens. Format depends on quantization mode:<br>- **BF16** (`use_fp8=False`): single tensor `[num_max_tokens, hidden]`, dtype `torch.bfloat16`.<br>- **FP8 per-token** (`use_fp8=True, use_ue8m0=False`): tuple `(int8_data, float32_scales)`. Data shape `[num_max_tokens, hidden]` (`torch.int8`), scales shape `[num_max_tokens]` (`torch.float32`).<br>- **MXFP8 per-block** (`use_fp8=True, use_ue8m0=True`, A5 only): tuple `(float8_e4m3fn_data, float8_e8m0fnu_scales)`. Data shape `[num_max_tokens, hidden]`, scales shape `[num_max_tokens * hidden / 32]` (one scale per 32-element block).<br>- **MXFP4 per-block** (`use_fp8=True, use_mxfp4=True`, A5 only, `default` strategy only): tuple `(float4_e2m1fn_x2_data, float8_e8m0fnu_scales)`. Data shape `[num_max_tokens, hidden / 2]`, scales shape `[num_max_tokens * hidden / 32]`.<br>Not all tokens are valid; only the first `recv_count` tokens per expert contain meaningful data. |
+| **recv_count** | `torch.Tensor` (`int64`) | Shape `[num_local_experts]`, number of tokens each expert actually received. |
+| **handle** | `Tuple` | Communication handle for `low_latency_combine`. Must be passed unchanged. |
+| **event** | `EventOverlap` | Event after kernel execution (valid only if `async_finish=True`). Not needed on DeepEP-Ascend. |
+| **hook** | `Callable` | Receiving hook function (valid only if `return_recv_hook=True`). Not needed on DeepEP-Ascend. |
+
+### Constraints
+
+- **num_tokens**: `num_tokens <= 512`, must be less than `num_max_dispatch_tokens_per_rank`.
+- **hidden**: A2 series: `0 < hidden <= 7168` and `hidden % 32 == 0`.
+- **num_topk**: A2 series internode: `[2, 16]`; intranode: `(0, 16]`; A3 series: `(0, 16]`.
+- **num_experts**: `(0, 512]`.
+- **HCCL_BUFFSIZE**: Check before calling. Default 200 MB. Minimum required size (non-layered): `(bs Ã— ep_world_size Ã— min(num_local_experts, topk) Ã— hidden Ã— 2B + 2MB) Ã— 2`. For layered (A2 dual-node): `num_experts Ã— bs Ã— (hidden Ã— 2B + 4 Ã— topk Ã— 4B) + 4MB + 800MB`. A5 subtracts 1MB state zone from the configured value.
+- **HCCL_INTRA_PCIE_ENABLE / HCCL_INTRA_ROCE_ENABLE**: A2 series internode: set `HCCL_INTRA_PCIE_ENABLE=1` and `HCCL_INTRA_ROCE_ENABLE=0`.
+
+---
+
+## `low_latency_combine`
+
+### Interface
+
+```python
+def low_latency_combine(
+    self,
+    x: torch.Tensor,
+    topk_idx: torch.Tensor,
+    topk_weights: torch.Tensor,
+    handle: tuple,
+    zero_copy: bool = False,
+    async_finish: bool = False,
+    return_recv_hook: bool = False,
+    out: Optional[torch.Tensor] = None,
+) -> Tuple[torch.Tensor, EventOverlap, Callable]
+```
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| **x** | `torch.Tensor` (`bfloat16`) | Yes | â€“ | Shape `[num_local_experts, num_max_dispatch_tokens_per_rank * num_ranks, hidden]`. Local computed tokens to be sent back to the original rank and reduced. |
+| **topk_idx** | `torch.Tensor` (`int64`) | Yes | â€“ | Shape `[num_combined_tokens, num_topk]`. Expert indices selected by dispatched tokens. `-1` supported. `num_combined_tokens` equals the number of dispatched tokens. Must match dispatch indices. |
+| **topk_weights** | `torch.Tensor` (`float`) | Yes | â€“ | Shape `[num_combined_tokens, num_topk]`. Top-k weights for reduction. |
+| **handle** | `Tuple` | Yes | â€“ | Communication handle from the corresponding `low_latency_dispatch`. Must be passed unchanged. |
+| **zero_copy** | `bool` | No | `False` | Whether the tensor is already in the RDMA buffer. Should be used with `get_next_low_latency_combine_buffer`. Not needed on DeepEP-Ascend. |
+| **async_finish** | `bool` | No | `False` | If set, the current stream will not wait for the communication kernel to finish. Not needed on DeepEP-Ascend. |
+| **return_recv_hook** | `bool` | No | `False` | If set, returns a receiving hook. The kernel will only issue RDMA requests without actually receiving data. Not needed on DeepEP-Ascend. |
+| **out** | `Optional[torch.Tensor]` (`bfloat16`) | No | `None` | In-place output tensor. If set, the kernel writes the result directly to this tensor and returns it. Not needed on DeepEP-Ascend. |
+
+### Return Values
+
+| Return Value | Type | Description |
+|--------------|------|-------------|
+| **combined_x** | `torch.Tensor` (`bfloat16`) | Shape `[num_combined_tokens, hidden]`. Reduced token tensor (weighted sum across experts). |
+| **event** | `EventOverlap` | Event after kernel execution (valid only if `async_finish=True`). Not needed on DeepEP-Ascend. |
+| **hook** | `Callable` | Receiving hook function (valid only if `return_recv_hook=True`). Must be called to ensure data arrival. Not needed on DeepEP-Ascend. |
+
+### Constraints
+
+- `low_latency_dispatch` and `low_latency_combine` must be used together.
+- **HCCL_BUFFSIZE**: Check before calling. Default 200 MB. Minimum required size (non-layered): `(bs Ã— ep_world_size Ã— min(num_local_experts, topk) Ã— hidden Ã— 2B + 2MB) Ã— 2`. For layered (A2 dual-node): `num_experts Ã— bs Ã— (hidden Ã— 2B + 4 Ã— topk Ã— 4B) + 4MB + 800MB`. A5 subtracts 1MB state zone from the configured value.
+- **HCCL_INTRA_PCIE_ENABLE / HCCL_INTRA_ROCE_ENABLE**: A2 series internode: set `HCCL_INTRA_PCIE_ENABLE=1` and `HCCL_INTRA_ROCE_ENABLE=0`.
+
+---
+
+<a id="ä¸­æ–‡"></a>
+
+## ä¸­æ–‡
+
+> **æ–‡ä»¶**ï¼š`buffer.py`
+> **æ ¸å¿ƒç±»**ï¼š`Buffer`
+> **ä¾èµ–**ï¼š`torch`, `deep_ep_cpp`
+> **ç›®çš„**ï¼šåœ¨ **å¤š NPUï¼ˆIntranodeï¼‰** ä¸ **è·¨èŠ‚ç‚¹ï¼ˆInternodeï¼‰** ç¯å¢ƒä¸‹ï¼Œé«˜æ•ˆå®Œæˆ ä½æ—¶å»¶**Token Dispatch** ä¸ **Token Combine**ï¼ˆå³åˆ†å‘/å½’çº¦ï¼‰æ“ä½œã€‚
+
+---
+
+## `low_latency_dispatch`
+
+### æ¥å£åŸå‹
+
+```python
+def low_latency_dispatch(
+    self,
+    x: torch.Tensor,
+    topk_idx: torch.Tensor,
+    num_max_dispatch_tokens_per_rank: int,
+    num_experts: int,
+    cumulative_local_expert_recv_stats: Optional[torch.Tensor] = None,
+    use_fp8: bool = True,
+    round_scale: bool = False,
+    use_ue8m0: bool = False,
+    use_mxfp4: bool = False,
+    async_finish: bool = False,
+    return_recv_hook: bool = False,
+    topk_weights: Optional[torch.Tensor] = None,
+) -> Tuple[
+    Tuple[torch.Tensor, torch.Tensor], torch.Tensor, Tuple, EventOverlap, Callable
+]
+```
+
+### å‚æ•°è¯´æ˜
+
+| å‚æ•° | ç±»å‹ | å¿…è¦ | é»˜è®¤ | è¯´æ˜ |
+|------|------|------|------|------|
+| **x** | `torch.Tensor` (`bfloat16`) | âœ… | â€“ | å½¢çŠ¶ `[num_tokens, hidden]`ã€‚è¦åˆ†å‘çš„ token æ•°å¿…é¡»å°äº `num_max_dispatch_tokens_per_rank`ã€‚A2 ç®—å­å®ç°è¦æ±‚ `0 < hidden <= 7168` ä¸” `hidden % 32 == 0`ã€‚ |
+| **topk_idx** | `torch.Tensor` (`int64`) | âœ… | â€“ | å½¢çŠ¶ `[num_tokens, num_topk]`ï¼Œæ¯ä¸ª token é€‰ä¸­çš„ expert ç´¢å¼•ã€‚`-1` è¡¨ç¤ºä¸é€‰æ‹©ä»»ä½• expertã€‚ |
+| **num_max_dispatch_tokens_per_rank** | `int` | âœ… | â€“ | æ¯ä¸ª rank æœ€å¤§åˆ†å‘ token æ•°ï¼Œæ‰€æœ‰ rank å¿…é¡»ç›¸åŒã€‚ |
+| **num_experts** | `int` | âœ… | â€“ | ä¸“å®¶æ€»æ•°ã€‚ |
+| **cumulative_local_expert_recv_stats** | `Optional[torch.Tensor]` (`int`) | âŒ | `None` | å½¢çŠ¶ `[num_local_experts]`ï¼Œç´¯è®¡ expert æ¥æ”¶ç»Ÿè®¡ï¼Œç”¨äºåœ¨çº¿ EP è´Ÿè½½å‡è¡¡ç›‘æ§ã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+| **use_fp8** | `bool` | âŒ | `True` | NPU ä¸Šå¯ç”¨ per-token åŠ¨æ€é‡åŒ–ï¼ˆquant_mode=2ï¼‰ï¼Œé€šä¿¡æ•°æ®ä¸º INT8ï¼Œç¼©æ”¾å› å­ä¸º per-token `float32`ã€‚ |
+| **round_scale** | `bool` | âŒ | `False` | æ˜¯å¦å°†ç¼©æ”¾å› å­å››èˆäº”å…¥ä¸º 2 çš„æ¬¡å¹‚ã€‚ä¸ `use_ue8m0` é…åˆä½¿ç”¨ã€‚ |
+| **use_ue8m0** | `bool` | âŒ | `False` | NPU ä¸Šè§¦å‘ MXFP8 per-block é‡åŒ–ï¼ˆquant_mode=3ï¼‰ï¼Œæ•°æ®æ ¼å¼ä¸º `float8_e4m3fn`ï¼Œç¼©æ”¾å› å­ä¸º `float8_e8m0fnu`ï¼ˆæ¯ 32 ä¸ªå…ƒç´ ä¸€ä¸ª scaleï¼‰ã€‚éœ€ `use_fp8=True`ã€‚ä»… A5 æ”¯æŒã€‚`alltoall` ç­–ç•¥ä¸æ”¯æŒã€‚ |
+| **use_mxfp4** | `bool` | âŒ | `False` | NPU ä¸Šè§¦å‘ MXFP4 per-block é‡åŒ–ï¼ˆquant_mode=4ï¼‰ï¼Œæ•°æ®æ ¼å¼ä¸º `float4_e2m1fn_x2`ï¼Œç¼©æ”¾å› å­ä¸º `float8_e8m0fnu`ï¼ˆæ¯ 32 ä¸ªå…ƒç´ ä¸€ä¸ª scaleï¼‰ã€‚éœ€ `use_fp8=True`ã€‚ä»… A5 æ”¯æŒï¼Œä¸”ä»… `default` ç­–ç•¥æ”¯æŒï¼ˆops/alltoall ç­–ç•¥ä¼šé™é»˜å¿½ç•¥æ­¤å‚æ•°ï¼‰ã€‚ |
+| **async_finish** | `bool` | âŒ | `False` | è‹¥è®¾ç½®ï¼Œå½“å‰ stream ä¸ä¼šç­‰å¾…é€šä¿¡ kernel å®Œæˆã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+| **return_recv_hook** | `bool` | âŒ | `False` | è‹¥è®¾ç½®ï¼Œè¿”å›æ¥æ”¶é’©å­ï¼›kernel åªå‘ RDMA è¯·æ±‚ä¸æ¥æ”¶æ•°æ®ï¼Œå¿…é¡»è°ƒç”¨é’©å­ç¡®ä¿æ•°æ®åˆ°è¾¾ã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+| **topk_weights** | `Optional[torch.Tensor]` (`float`) | âŒ | `None` | å¯¹åº” `topk_idx` çš„ top-k æƒé‡ã€‚ |
+
+### è¿”å›å€¼è¯´æ˜
+
+| è¿”å›å€¼ | ç±»å‹ | è¯´æ˜ |
+|--------|------|------|
+| **recv_x** | `Tuple[torch.Tensor, torch.Tensor]` æˆ– `torch.Tensor` | æ¥æ”¶çš„ tokenã€‚æ ¼å¼å–å†³äºé‡åŒ–æ¨¡å¼ï¼š<br>- **BF16**ï¼ˆ`use_fp8=False`ï¼‰ï¼šå•ä¸ª tensor `[num_max_tokens, hidden]`ï¼Œdtype `torch.bfloat16`ã€‚<br>- **FP8 per-token**ï¼ˆ`use_fp8=True, use_ue8m0=False`ï¼‰ï¼šå…ƒç»„ `(int8_data, float32_scales)`ã€‚æ•°æ®å½¢çŠ¶ `[num_max_tokens, hidden]`ï¼ˆ`torch.int8`ï¼‰ï¼Œscales å½¢çŠ¶ `[num_max_tokens]`ï¼ˆ`torch.float32`ï¼‰ã€‚<br>- **MXFP8 per-block**ï¼ˆ`use_fp8=True, use_ue8m0=True`ï¼Œä»… A5ï¼‰ï¼šå…ƒç»„ `(float8_e4m3fn_data, float8_e8m0fnu_scales)`ã€‚æ•°æ®å½¢çŠ¶ `[num_max_tokens, hidden]`ï¼Œscales å½¢çŠ¶ `[num_max_tokens * hidden / 32]`ï¼ˆæ¯ 32 ä¸ªå…ƒç´ ä¸€ä¸ª scaleï¼‰ã€‚<br>- **MXFP4 per-block**ï¼ˆ`use_fp8=True, use_mxfp4=True`ï¼Œä»… A5ï¼Œä»… `default` ç­–ç•¥ï¼‰ï¼šå…ƒç»„ `(float4_e2m1fn_x2_data, float8_e8m0fnu_scales)`ã€‚æ•°æ®å½¢çŠ¶ `[num_max_tokens, hidden / 2]`ï¼Œscales å½¢çŠ¶ `[num_max_tokens * hidden / 32]`ã€‚<br>å¹¶éæ‰€æœ‰ token éƒ½æœ‰æ•ˆï¼Œä»…æ¯ä¸ª expert å‰ `recv_count` ä¸ª token å«æœ‰æ„ä¹‰æ•°æ®ã€‚ |
+| **recv_count** | `torch.Tensor` (`int64`) | å½¢çŠ¶ `[num_local_experts]`ï¼Œæ¯ä¸ª expert å®é™…æ¥æ”¶çš„ token æ•°ã€‚ |
+| **handle** | `Tuple` | ä¾› `low_latency_combine` ä½¿ç”¨çš„é€šä¿¡å¥æŸ„ï¼Œå¿…é¡»åŸæ ·ä¼ é€’ã€‚ |
+| **event** | `EventOverlap` | kernel æ‰§è¡Œåçš„äº‹ä»¶ï¼ˆä»…åœ¨ `async_finish=True` æ—¶æœ‰æ•ˆï¼‰ã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+| **hook** | `Callable` | æ¥æ”¶é’©å­å‡½æ•°ï¼ˆä»…åœ¨ `return_recv_hook=True` æ—¶æœ‰æ•ˆï¼‰ã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+
+### çº¦æŸè¯´æ˜
+
+- **num_tokens**ï¼š`num_tokens <= 512`ï¼Œå¿…é¡»å°äº `num_max_dispatch_tokens_per_rank`ã€‚
+- **hidden**ï¼šA2 ç®—å­å®ç°è¦æ±‚ `0 < hidden <= 7168` ä¸” `hidden % 32 == 0`ã€‚
+- **num_topk**ï¼šA2 ç³»åˆ—åŒæœº `[2, 16]`ï¼›å•æœº `(0, 16]`ï¼›A3 ç³»åˆ— `(0, 16]`ã€‚
+- **num_experts**ï¼š`(0, 512]`ã€‚
+- **HCCL_BUFFSIZE**ï¼šè°ƒç”¨æ¥å£å‰éœ€æ£€æŸ¥ï¼Œé»˜è®¤ 200 MBã€‚éåˆ†å±‚æœ€å°éœ€æ±‚ï¼š`(bs Ã— ep_world_size Ã— min(num_local_experts, topk) Ã— hidden Ã— 2B + 2MB) Ã— 2`ï¼›åˆ†å±‚ï¼ˆA2åŒæœºï¼‰ï¼š`num_experts Ã— bs Ã— (hidden Ã— 2B + 4 Ã— topk Ã— 4B) + 4MB + 800MB`ã€‚A5 ä»é…ç½®å€¼ä¸­æ‰£é™¤ 1MB çŠ¶æ€åŒºã€‚
+- **HCCL_INTRA_PCIE_ENABLE / HCCL_INTRA_ROCE_ENABLE**ï¼šA2 ç³»åˆ—åŒæœºåœºæ™¯éœ€é…ç½® `HCCL_INTRA_PCIE_ENABLE=1` å’Œ `HCCL_INTRA_ROCE_ENABLE=0`ã€‚
+
+---
+
+## `low_latency_combine`
+
+### æ¥å£åŸå‹
+
+```python
+def low_latency_combine(
+    self,
+    x: torch.Tensor,
+    topk_idx: torch.Tensor,
+    topk_weights: torch.Tensor,
+    handle: tuple,
+    zero_copy: bool = False,
+    async_finish: bool = False,
+    return_recv_hook: bool = False,
+    out: Optional[torch.Tensor] = None,
+) -> Tuple[torch.Tensor, EventOverlap, Callable]
+```
+
+### å‚æ•°è¯´æ˜
+
+| å‚æ•° | ç±»å‹ | å¿…è¦ | é»˜è®¤ | è¯´æ˜ |
+|------|------|------|------|------|
+| **x** | `torch.Tensor` (`bfloat16`) | âœ… | â€“ | å½¢çŠ¶ `[num_local_experts, num_max_dispatch_tokens_per_rank * num_ranks, hidden]`ã€‚æœ¬åœ°è®¡ç®—åéœ€å‘é€å›åŸå§‹ rank è¿›è¡Œ reduce çš„ tokenã€‚ |
+| **topk_idx** | `torch.Tensor` (`int64`) | âœ… | â€“ | å½¢çŠ¶ `[num_combined_tokens, num_topk]`ã€‚dispatched token é€‰ä¸­çš„ expert ç´¢å¼•ï¼Œæ”¯æŒ `-1`ã€‚`num_combined_tokens` ç­‰äºåˆ†å‘ token æ•°ã€‚å¿…é¡»ä¸ dispatch æ—¶çš„ç´¢å¼•åŒ¹é…ã€‚ |
+| **topk_weights** | `torch.Tensor` (`float`) | âœ… | â€“ | å½¢çŠ¶ `[num_combined_tokens, num_topk]`ã€‚å½’çº¦æ—¶ä½¿ç”¨çš„ top-k æƒé‡ã€‚ |
+| **handle** | `Tuple` | âœ… | â€“ | ç”±å¯¹åº” `low_latency_dispatch` è¿”å›çš„é€šä¿¡å¥æŸ„ï¼Œå¿…é¡»åŸæ ·ä¼ é€’ã€‚ |
+| **zero_copy** | `bool` | âŒ | `False` | tensor æ˜¯å¦å·²åœ¨ RDMA ç¼“å†²åŒºï¼Œéœ€ä¸ `get_next_low_latency_combine_buffer` é…åˆä½¿ç”¨ã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+| **async_finish** | `bool` | âŒ | `False` | è‹¥è®¾ç½®ï¼Œå½“å‰ stream ä¸ä¼šç­‰å¾…é€šä¿¡ kernel å®Œæˆã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+| **return_recv_hook** | `bool` | âŒ | `False` | è‹¥è®¾ç½®ï¼Œè¿”å›æ¥æ”¶é’©å­ï¼›kernel åªå‘ RDMA è¯·æ±‚ä¸æ¥æ”¶æ•°æ®ã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+| **out** | `Optional[torch.Tensor]` (`bfloat16`) | âŒ | `None` | åŸåœ°è¾“å‡º tensorï¼Œè‹¥è®¾ç½®åˆ™ kernel å°†ç»“æœç›´æ¥å†™å…¥æ­¤ tensor å¹¶è¿”å›ã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+
+### è¿”å›å€¼è¯´æ˜
+
+| è¿”å›å€¼ | ç±»å‹ | è¯´æ˜ |
+|--------|------|------|
+| **combined_x** | `torch.Tensor` (`bfloat16`) | å½¢çŠ¶ `[num_combined_tokens, hidden]`ã€‚å½’çº¦åçš„ token tensorï¼ˆåŠ æƒæ±‚å’Œï¼‰ã€‚ |
+| **event** | `EventOverlap` | kernel æ‰§è¡Œåçš„äº‹ä»¶ï¼ˆä»…åœ¨ `async_finish=True` æ—¶æœ‰æ•ˆï¼‰ã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+| **hook** | `Callable` | æ¥æ”¶é’©å­å‡½æ•°ï¼ˆä»…åœ¨ `return_recv_hook=True` æ—¶æœ‰æ•ˆï¼‰ï¼Œå¿…é¡»è°ƒç”¨ä»¥ç¡®ä¿æ•°æ®åˆ°è¾¾ã€‚DeepEP-Ascend ä¸éœ€è¦ã€‚ |
+
+### çº¦æŸè¯´æ˜
+
+- `low_latency_dispatch` å’Œ `low_latency_combine` å¿…é¡»é…å¥—ä½¿ç”¨ã€‚
+- **HCCL_BUFFSIZE**ï¼šè°ƒç”¨æ¥å£å‰éœ€æ£€æŸ¥ï¼Œé»˜è®¤ 200 MBã€‚éåˆ†å±‚æœ€å°éœ€æ±‚ï¼š`(bs Ã— ep_world_size Ã— min(num_local_experts, topk) Ã— hidden Ã— 2B + 2MB) Ã— 2`ï¼›åˆ†å±‚ï¼ˆA2åŒæœºï¼‰ï¼š`num_experts Ã— bs Ã— (hidden Ã— 2B + 4 Ã— topk Ã— 4B) + 4MB + 800MB`ã€‚A5 ä»é…ç½®å€¼ä¸­æ‰£é™¤ 1MB çŠ¶æ€åŒºã€‚
+- **HCCL_INTRA_PCIE_ENABLE / HCCL_INTRA_ROCE_ENABLE**ï¼šA2 ç³»åˆ—åŒæœºåœºæ™¯éœ€é…ç½® `HCCL_INTRA_PCIE_ENABLE=1` å’Œ `HCCL_INTRA_ROCE_ENABLE=0`ã€‚

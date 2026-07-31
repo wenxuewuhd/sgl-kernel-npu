@@ -1,10 +1,10 @@
 #include "register/op_def_registry.h"
 
 namespace ops {
-class MoeDistributeCombineV2 : public OpDef
+class MoeLowLatencyCombineV2 : public OpDef
 {
 public:
-    explicit MoeDistributeCombineV2(const char *name) : OpDef(name)
+    explicit MoeLowLatencyCombineV2(const char *name) : OpDef(name)
     {
         this->Input("expand_x")
             .ParamType(REQUIRED)
@@ -151,11 +151,14 @@ public:
             .ExtendCfgInfo("jitCompile.flag", "static_true")
             .ExtendCfgInfo("multiKernelSupportDynamicGraph.value", "multi_kernel");
 
+#ifdef __DAV_C310__
+        this->AICore().AddConfig("ascend950", aicore_config);
+#endif
         this->AICore().AddConfig("ascend910_93", aicore_config);
         this->MC2().HcclGroup({"group_ep", "group_tp"});
     }
 };
 
-OP_ADD(MoeDistributeCombineV2);
+OP_ADD(MoeLowLatencyCombineV2);
 
 }  // namespace ops

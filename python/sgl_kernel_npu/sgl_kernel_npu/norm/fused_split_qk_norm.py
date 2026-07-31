@@ -98,6 +98,9 @@ def fused_split_qk_norm(
     qk_rope_dim,
     eps=1e-6,
 ):
+    assert q_lora_rank > 0, f"q_lora_rank should be positive, got {q_lora_rank}"
+    assert kv_lora_rank > 0, f"kv_lora_rank should be positive, got {kv_lora_rank}"
+    assert qk_rope_dim > 0, f"qk_rope_dim should be positive, got {qk_rope_dim}"
     B, total_hidden = fused_qkv_a_proj_out.shape
     device = fused_qkv_a_proj_out.device
     dtype = fused_qkv_a_proj_out.dtype
@@ -112,16 +115,16 @@ def fused_split_qk_norm(
         k_nope,
         k_pe,
         q_a_layernorm.weight,
-        q_a_layernorm.bias,
+        q_a_layernorm.bias if hasattr(q_a_layernorm, "bias") else None,
         kv_a_layernorm.weight,
-        kv_a_layernorm.bias,
+        kv_a_layernorm.bias if hasattr(kv_a_layernorm, "bias") else None,
         total_hidden,
         q_lora_rank,
         kv_lora_rank,
         qk_rope_dim,
         eps,
-        q_a_layernorm.bias is not None,
-        kv_a_layernorm.bias is not None,
+        hasattr(q_a_layernorm, "bias") and q_a_layernorm.bias is not None,
+        hasattr(kv_a_layernorm, "bias") and kv_a_layernorm.bias is not None,
     )
 
     # Restore original shape by adding a sequence dimension

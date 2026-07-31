@@ -111,6 +111,9 @@ private:
 
     __aicore__ GM_ADDR GetWinStateAddrByRankId(const int32_t rankId, const uint8_t domain)
     {
+        if (domain == TP_DOMAIN) {
+            assert(tpWinContext_ != nullptr);
+        }
         if (domain == EP_DOMAIN) {
             return (GM_ADDR)((epRankId_ == rankId)
                                  ? epWinContext_->localWindowsExp
@@ -575,9 +578,9 @@ __aicore__ inline void CamMoeDistributeCombine<TemplateMC2TypeFunc>::CustomAdd(L
     if constexpr (AscendC::IsSameType<ExpandXType, bfloat16_t>::value) {
         Cast(winTpSendCountFloatTensor_, src0, RoundMode::CAST_NONE, dataCnt);
         Cast(gmTpSendCountFloatTensor_, src1, RoundMode::CAST_NONE, dataCnt);
-        pipe_barrier(PIPE_V);
+        PipeBarrier<PIPE_V>();
         Add(winTpSendCountFloatTensor_, winTpSendCountFloatTensor_, gmTpSendCountFloatTensor_, dataCnt);
-        pipe_barrier(PIPE_V);
+        PipeBarrier<PIPE_V>();
         Cast(dst, winTpSendCountFloatTensor_, RoundMode::CAST_ROUND, dataCnt);
     } else {
         Add(dst, src0, src1, dataCnt);
